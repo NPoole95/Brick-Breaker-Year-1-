@@ -105,7 +105,9 @@ void main()
 	const float cameraMinRotationLimit = -10.0f; //maximum limit for camera backwards rotation
 	float cameraRotation = 0.0f; // camera rotation variable
 
-
+	bool ballEnabled = true; // A boolean used in conjunction with a short timer to avoid the ball colliding with multiple blocks at the same time.
+	const float ballTimerMax = 0.1f;
+	float ballTimer = ballTimerMax;
 
 	int blocksDestroyed = 0;  //Number of collisions
 	int maxBlocksDestroyed = 20;     //Maximum number of blocks destroyed before game ends
@@ -141,6 +143,7 @@ void main()
 	for (int i = 0; i < kBlockQty; i++)          // For loop to generate blocks using array positions for X,Y,Z coords
 	{
 		block[i] = blockMesh->CreateModel(blockPosX[i], blockPosY[i], blockPosZ[i]);
+		block[i]->SetSkin("glass_blue.jpg");
 
 	}
 
@@ -166,9 +169,19 @@ void main()
 		// update timers
 		frameTime = myEngine->Timer();
 		blockSpeed = -0.1 * kGameSpeed * frameTime; //Speed at which blocks move down the screen
-		blockSinkSpeed = kGameSpeed * frameTime; // speed at which blocks sink after being destroyed
-		kBallSpeed = 2 * kGameSpeed * frameTime; //Speed at which the ball(marble) moves
+		blockSinkSpeed = -kGameSpeed * frameTime; // speed at which blocks sink after being destroyed
+		kBallSpeed = 4 * kGameSpeed * frameTime; //Speed at which the ball(marble) moves
 		kRotationSpeed = kGameSpeed * frameTime; // Speed at which toe cannon rotates
+
+		ballTimer -= frameTime;
+		if (ballTimer <= 0.0f) // set the ball to be enabled again if the timer has expired
+		{
+			ballEnabled = true;
+		}
+		else if (ballEnabled == false)
+		{
+			int i = 1;
+		}
 
 		// Draw the scene
 		myEngine->DrawScene();
@@ -178,9 +191,8 @@ void main()
 		//Collisions
 		for (int i = 0; i < kBlockQty; i++)
 		{
-			if (currentBlockState[i] == Healthy || currentBlockState[i] == Damaged && currentGameState != Over)  // checks to make sure collisions are not tested on already destroyed blocks
+			if (currentBlockState[i] != Destroyed && currentGameState != Over)  // checks to make sure collisions are not tested on already destroyed blocks
 			{
-
 				if (block[i]->GetZ() <= blockBoundary) //Checks to see if the blocks have reached the cannon, causing a defeat
 				{
 					currentGameState = Over;
@@ -192,50 +204,53 @@ void main()
 				{
 					block[i]->MoveZ(blockSpeed); // Causes the blocks to slowly move towards the cannon. ignoring blocks that have been destroyed.
 				}
-
-				boxSide collision = SphereToBox(marble->GetX(), marble->GetY(), marble->GetZ(), oldX, oldZ, cubeXLength, cubeYLength, cubeZLength, block[i]->GetX(), block[i]->GetY(), block[i]->GetZ(), sphereRadius);
-
-				if (collision == frontSide || collision == backSide)
+				if (ballEnabled)
 				{
-					zMoveVector = -zMoveVector; //causes the marble to rebound off of blocks 
-
-					if (currentBlockState[i] == Healthy)
+					boxSide collision = SphereToBox(marble->GetX(), marble->GetY(), marble->GetZ(), oldX, oldZ, cubeXLength, cubeYLength, cubeZLength, block[i]->GetX(), block[i]->GetY(), block[i]->GetZ(), sphereRadius);
+					if (collision == frontSide || collision == backSide)
 					{
-						currentBlockState[i] = Damaged;
-						block[i]->SetSkin("tiles_red.jpg"); // Sets the block to red to show it is damaged
+						zMoveVector = -zMoveVector; //causes the marble to rebound off of blocks 
 
+						if (currentBlockState[i] == Healthy)
+						{
+							currentBlockState[i] = Damaged;
+							block[i]->SetSkin("glass_red.jpg"); // Sets the block to red to show it is damaged
+
+						}
+						else if (currentBlockState[i] == Damaged)
+						{
+
+							currentBlockState[i] = Destroyed;
+							blocksDestroyed++; //increases counter for no. of blocks destroyed
+
+						}
+						// disable the ball after a collision to stop multiple boxes being hit at once
+						ballEnabled = false;
+						ballTimer = ballTimerMax;
 					}
-					else if (currentBlockState[i] == Damaged)
+					else if (collision == leftSide || collision == rightSide)
 					{
+						xMoveVector = -xMoveVector; //causes the marble to rebound off of blocks 
 
-						currentBlockState[i] = Destroyed;
-						blocksDestroyed++; //increases counter for no. of blocks destroyed
+						if (currentBlockState[i] == Healthy)
+						{
+							currentBlockState[i] = Damaged;
+							block[i]->SetSkin("glass_red.jpg"); // Sets the block to red to show it is damaged
 
-					}
-				}
-				if (collision == leftSide || collision == rightSide)
-				{
-					xMoveVector = -xMoveVector; //causes the marble to rebound off of blocks 
-
-					if (currentBlockState[i] == Healthy)
-					{
-						currentBlockState[i] = Damaged;
-						block[i]->SetSkin("tiles_red.jpg"); // Sets the block to red to show it is damaged
-
-					}
-					else if (currentBlockState[i] == Damaged)
-					{
-
-						currentBlockState[i] = Destroyed;
-						blocksDestroyed++; //increases counter for no. of blocks destroyed
-
+						}
+						else if (currentBlockState[i] == Damaged)
+						{
+							currentBlockState[i] = Destroyed;
+							blocksDestroyed++; //increases counter for no. of blocks destroyed
+						}
+						// disable the ball after a collision to stop multiple boxes being hit at once
+						ballEnabled = false;
+						ballTimer = ballTimerMax;
 					}
 				}
 			}
-			if (currentBlockState[i] == Destroyed)
+			else if (currentBlockState[i] == Destroyed)
 			{
-
-
 				if (block[i]->GetY() >= blockUnderFloor) //checks if block is not under the floor
 				{
 					block[i]->MoveY(blockSinkSpeed); // moves the block slowly into the floor
@@ -311,15 +326,16 @@ void main()
 			if (myEngine->KeyHit(kFiringStateKey))
 			{
 				currentGameState = Firing; //Changes the game to the firing state
-				zMoveVector = cos(rotationLimit * pi / 180) * kBallSpeed; //calculates marble Z movement vector
-				xMoveVector = sin(rotationLimit * pi / 180) * kBallSpeed; //calculates marble X movement vector
+				zMoveVector = cos(rotationLimit * pi / 180); //calculates marble Z movement vector
+				xMoveVector = sin(rotationLimit * pi / 180); //calculates marble X movement vector
+				
 			}
 
 		}
 
 		if (currentGameState == Firing)
 		{
-			marble->Move(xMoveVector, 0.0f, zMoveVector); //Starts marble movement
+			marble->Move(xMoveVector * kBallSpeed, 0.0f, zMoveVector * kBallSpeed); //Starts marble movement
 			if (myEngine->KeyHeld(kRotateRightKey))
 			{
 				if (rotationLimit < rotationMaxLimit) // Tests limit of cannon rotation to keep it within boundaries
